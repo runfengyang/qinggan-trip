@@ -734,35 +734,93 @@ function showOverviewMarkers() {
   if (!map || !AMapGlobal) return;
   clearMap();
 
-  // 收集所有景点位置
+  // 收集所有关键位置：每天的起止点 + 主要景点
   const allPoints = [];
-  DAYS.slice(1).forEach(day => {
-    day.locations.forEach(loc => {
-      if ((loc.type === 'spot' || loc.type === 'hotel') && loc.lat && loc.lng) {
-        allPoints.push({
-          position: [loc.lng, loc.lat],
-          name: loc.name,
-          day: day.label,
-          color: day.color
-        });
-      }
+
+  // 起点：乌鲁木齐机场（D1）
+  allPoints.push({
+    position: [87.4742, 43.9072],
+    name: '乌鲁木齐地窝堡机场',
+    day: 'D1',
+    dayNum: 1,
+    type: 'start',
+    color: '#34c759'
+  });
+
+  // 每天的住宿点（代表当天终点）
+  const dayEndPoints = [
+    { day: 'D1', dayNum: 1, name: '乌鲁木齐', pos: [87.615092, 43.87626], color: '#ff9500' },
+    { day: 'D2', dayNum: 2, name: '布尔津', pos: [86.8649, 47.7006], color: '#0071e3' },
+    { day: 'D3', dayNum: 3, name: '禾木村', pos: [87.4333, 48.5667], color: '#34c759' },
+    { day: 'D4', dayNum: 4, name: '布尔津', pos: [86.8649, 47.7006], color: '#af52de' },
+    { day: 'D5', dayNum: 5, name: '奎屯', pos: [84.9, 44.35], color: '#ff3b30' },
+    { day: 'D6', dayNum: 6, name: '赛里木湖', pos: [81.3333, 44.5833], color: '#007aff' },
+    { day: 'D7', dayNum: 7, name: '伊宁', pos: [81.3167, 43.9167], color: '#af52de' },
+    { day: 'D8', dayNum: 8, name: '那拉提', pos: [84.0167, 43.2833], color: '#ff9500' },
+    { day: 'D9', dayNum: 9, name: '那拉提', pos: [84.0167, 43.2833], color: '#00c7be' },
+  ];
+
+  dayEndPoints.forEach((point, idx) => {
+    allPoints.push({
+      position: point.pos,
+      name: point.name,
+      day: point.day,
+      dayNum: point.dayNum,
+      type: idx === dayEndPoints.length - 1 ? 'end' : 'stop',
+      color: point.color
     });
   });
 
-  // 添加标记 - 使用简单的 div 标记
+  // 添加标记 - 使用带数字的标记
   allPoints.forEach(point => {
+    const isStart = point.type === 'start';
+    const isEnd = point.type === 'end';
+    const dayNum = point.dayNum;
+
+    // 标记样式：圆形背景 + 天数数字
+    const markerHtml = `
+      <div style="
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: ${point.color};
+        border: 3px solid #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        color: white;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      ">${dayNum}</div>
+      ${isStart ? '<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:600;color:#34c759;background:#fff;padding:2px 6px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,0.2);white-space:nowrap;">🚀 起点</div>' : ''}
+      ${isEnd ? '<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:600;color:#ff3b30;background:#fff;padding:2px 6px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,0.2);white-space:nowrap;">🏁 终点</div>' : ''}
+    `;
+
     const marker = new AMapGlobal.Marker({
       position: point.position,
-      content: `<div style="width:16px;height:16px;border-radius:50%;background:${point.color};border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
-      offset: new AMapGlobal.Pixel(-8, -8)
+      content: markerHtml,
+      offset: new AMapGlobal.Pixel(-16, -16),
+      zIndex: 100 + dayNum
     });
 
     marker.setMap(map);
 
-    // 信息窗体
+    // 信息窗体 - 显示第几天和地点名称
+    const infoHtml = `
+      <div style="padding:10px 12px;font-size:13px;min-width:100px;">
+        <div style="font-weight:600;font-size:14px;margin-bottom:4px;">${point.name}</div>
+        <div style="color:#666;display:flex;align-items:center;gap:4px;">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${point.color};"></span>
+          第${dayNum}天${isStart ? ' · 起点' : isEnd ? ' · 终点' : ''}
+        </div>
+      </div>
+    `;
+
     const infoWindow = new AMapGlobal.InfoWindow({
-      content: `<div style="padding:8px;font-size:13px;"><b>${point.name}</b><br><span style="color:#666">${point.day}</span></div>`,
-      offset: new AMapGlobal.Pixel(0, -10)
+      content: infoHtml,
+      offset: new AMapGlobal.Pixel(0, -20)
     });
 
     marker.on('click', () => {
@@ -772,15 +830,49 @@ function showOverviewMarkers() {
     markers.push(marker);
   });
 
-  // 设置地图视野 - 手动设置中心点和缩放级别
-  if (allPoints.length > 0) {
-    const centerLng = allPoints.reduce((sum, p) => sum + p.position[0], 0) / allPoints.length;
-    const centerLat = allPoints.reduce((sum, p) => sum + p.position[1], 0) / allPoints.length;
-    map.setCenter([centerLng, centerLat]);
-    map.setZoom(6);
-  }
+  // 添加路线序号标签（在路线中段显示）
+  const routeLabels = [
+    { pos: [87.0, 45.5], label: 'D1→D2', desc: '乌鲁木齐→布尔津' },
+    { pos: [87.2, 48.0], label: 'D2→D3', desc: '布尔津→禾木' },
+    { pos: [86.9, 48.0], label: 'D3→D4', desc: '禾木→喀纳斯→布尔津' },
+    { pos: [85.5, 46.0], label: 'D4→D5', desc: '布尔津→奎屯' },
+    { pos: [82.5, 44.8], label: 'D5→D6', desc: '奎屯→赛里木湖' },
+    { pos: [81.3, 44.2], label: 'D6→D7', desc: '赛里木湖→伊宁' },
+    { pos: [82.5, 44.0], label: 'D7→D8', desc: '伊宁→那拉提' },
+    { pos: [84.0, 43.5], label: 'D8→D9', desc: '那拉提返程' },
+  ];
 
-  // 总览视图：通过导航API获取真实路线，分6段绘制大环线
+  routeLabels.forEach((rl, idx) => {
+    const labelMarker = new AMapGlobal.Marker({
+      position: rl.pos,
+      content: `<div style="
+        background: rgba(0,0,0,0.6);
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+        backdrop-filter: blur(4px);
+      ">${rl.label}</div>`,
+      offset: new AMapGlobal.Pixel(0, -10),
+      zIndex: 50
+    });
+    labelMarker.setMap(map);
+    markers.push(labelMarker);
+  });
+
+  // 设置地图视野
+  map.setCenter([85.0, 45.0]);
+  map.setZoom(6);
+
+  // 绘制路线
+  drawRouteLines();
+}
+
+function drawRouteLines() {
+  if (!map || !AMapGlobal) return;
+
   const SEGMENTS = [
     {
       name: '乌鲁木齐→布尔津',
@@ -893,30 +985,6 @@ function showOverviewMarkers() {
     }
   }
   fetchSegments();
-
-  // 在主要节点上标注地名
-  const labelPoints = [
-    { pos: [87.6168, 43.8256], name: '乌鲁木齐', color: '#0071e3' },
-    { pos: [88.1267, 43.8883], name: '天池', color: '#00c7be' },
-    { pos: [86.8649, 47.7006], name: '布尔津', color: '#af52de' },
-    { pos: [87.4333, 48.5667], name: '禾木', color: '#34c759' },
-    { pos: [87.0353, 48.5147], name: '喀纳斯', color: '#af52de' },
-    { pos: [85.3333, 46.1000], name: '魔鬼城', color: '#ff3b30' },
-    { pos: [81.3333, 44.5833], name: '赛里木湖', color: '#007aff' },
-    { pos: [81.3167, 43.9167], name: '伊宁', color: '#af52de' },
-    { pos: [82.3333, 43.2500], name: '库尔德宁', color: '#007aff' },
-    { pos: [84.0167, 43.2833], name: '那拉提', color: '#ff9500' }
-  ];
-  labelPoints.forEach(lp => {
-    const labelMarker = new AMapGlobal.Marker({
-      position: lp.pos,
-      content: `<div style="background:${lp.color};color:#fff;font-size:11px;font-weight:600;padding:2px 6px;border-radius:10px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.3);">${lp.name}</div>`,
-      offset: new AMapGlobal.Pixel(0, -25),
-      zIndex: 200
-    });
-    labelMarker.setMap(map);
-    markers.push(labelMarker);
-  });
 }
 
 function showDayMarkers(dayId) {
